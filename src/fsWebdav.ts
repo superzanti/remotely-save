@@ -157,19 +157,27 @@ const getWebdavPath = (fileOrFolderPath: string, remoteBaseDir: string) => {
   let key = fileOrFolderPath;
   if (fileOrFolderPath === "/" || fileOrFolderPath === "") {
     // special
-    key = `/${remoteBaseDir}/`;
+    key = remoteBaseDir === "" ? `` : `/${remoteBaseDir}/`;
   } else if (fileOrFolderPath.startsWith("/")) {
     console.warn(
       `why the path ${fileOrFolderPath} starts with '/'? but we just go on.`
     );
-    key = `/${remoteBaseDir}${fileOrFolderPath}`;
+    key = remoteBaseDir === "" ? `/${fileOrFolderPath}` : `/${remoteBaseDir}${fileOrFolderPath}`;
   } else {
-    key = `/${remoteBaseDir}/${fileOrFolderPath}`;
+    key = remoteBaseDir === "" ? `/${fileOrFolderPath}/` : `/${remoteBaseDir}/${fileOrFolderPath}`;
   }
   return key;
 };
 
 const getNormPath = (fileOrFolderPath: string, remoteBaseDir: string) => {
+  if (remoteBaseDir === "") {
+    // When remoteBaseDir is ".", the path is already normalized relative to root.
+    if (fileOrFolderPath.startsWith("/")) {
+      return fileOrFolderPath.slice(1); // Remove leading slash to return relative path.
+    }
+    return fileOrFolderPath; // Already relative.
+  }
+
   if (
     !(
       fileOrFolderPath === `/${remoteBaseDir}` ||
@@ -261,7 +269,8 @@ export class FakeFsWebdav extends FakeFs {
     this.kind = "webdav";
     this.webdavConfig = cloneDeep(webdavConfig);
     this.webdavConfig.address = tryEncodeURI(this.webdavConfig.address);
-    this.remoteBaseDir = this.webdavConfig.remoteBaseDir || vaultName || "";
+    this.remoteBaseDir = this.webdavConfig.remoteBaseDir === "." ? "" : `${this.webdavConfig.remoteBaseDir}`;
+    this.remoteBaseDir = this.remoteBaseDir || vaultName || "";
     this.vaultFolderExists = false;
     this.saveUpdatedConfigFunc = saveUpdatedConfigFunc;
 
@@ -308,6 +317,9 @@ export class FakeFsWebdav extends FakeFs {
     // check vault folder
     if (this.vaultFolderExists) {
       // pass
+    } else if (this.remoteBaseDir === "") {
+      console.info("remote vault folder is root, assume it exists");
+      this.vaultFolderExists = true;
     } else {
       const res = await this.client.exists(`/${this.remoteBaseDir}/`);
       if (res) {
@@ -365,9 +377,8 @@ export class FakeFsWebdav extends FakeFs {
   };
 
   async _checkPartialSupport() {
-    const compliance = await this.client.getDAVCompliance(
-      `/${this.remoteBaseDir}/`
-    );
+    const path = this.remoteBaseDir === "" ? "/" : `/${this.remoteBaseDir}/`;
+    const compliance = await this.client.getDAVCompliance(path);
 
     for (const c of compliance.compliance) {
       // nextcloud AND with an account
