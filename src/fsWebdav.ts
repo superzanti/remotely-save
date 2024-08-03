@@ -170,6 +170,10 @@ const getWebdavPath = (fileOrFolderPath: string, remoteBaseDir: string) => {
 };
 
 const getNormPath = (fileOrFolderPath: string, remoteBaseDir: string) => {
+  if (remoteBaseDir === ".") {
+    return fileOrFolderPath;
+  }
+
   if (
     !(
       fileOrFolderPath === `/${remoteBaseDir}` ||
